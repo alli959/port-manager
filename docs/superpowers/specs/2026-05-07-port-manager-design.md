@@ -78,6 +78,8 @@ ss -ulnp 2>/dev/null    # UDP listening
 
 Parse output to extract: state, local address, port, PID, process name.
 
+> **Note:** WSL scanning covers the current/default WSL distro only. Multiple distros are out of scope.
+
 ### Windows Ports
 
 Run via `powershell.exe`:
@@ -158,7 +160,7 @@ Ports forwarded by WSL appear in both WSL and Windows scans. These are shown as 
 - Each row has a **Stop** button (red, with stop icon)
 - Default behavior: confirmation dialog ("Stop process `node` (PID 1234) on port 3000?")
 - Confirmation can be toggled off in settings
-- After stopping: row disappears on next refresh, toast notification confirms
+- After stopping: an immediate rescan is triggered (regardless of auto-refresh setting), row disappears from results, toast notification confirms
 
 ### Settings Panel
 
@@ -229,6 +231,7 @@ Scanning runs WSL and Windows scans in parallel (via `Promise.allSettled`). If o
 ### Scan Lifecycle
 
 - Each scan has a **5-second timeout**. If a scan exceeds this, it is killed and produces a `ScanError`
+- On any scan failure (timeout or error), the previous successful data for that source is **cleared** — the table only shows confirmed-live data
 - Auto-refresh waits for the current scan to complete before scheduling the next one (no overlapping scans)
 - During a scan, the refresh button shows a spinner and is disabled
 - First load triggers an immediate scan; auto-refresh timer starts after the first scan completes
@@ -270,14 +273,14 @@ execSync(`powershell.exe -NoProfile -Command "Stop-Process -Id ${pid} -Force"`);
 
 ### Install Script
 
-A `postinstall` npm script (`scripts/install.sh`) handles launcher generation:
+`scripts/install.sh` handles launcher generation. It is run manually after cloning/setup (`npm run setup`), NOT as a postinstall hook:
 
 1. Resolves the absolute install path
 2. Generates `~/.local/share/applications/port-manager.desktop` with resolved paths
-3. Generates `launch.bat` in the project root with resolved paths
+3. Generates `launch.bat` in the project root (gitignored) with resolved paths
 4. Makes `bin/cli.js` executable
 
-On cleanup, users can run `scripts/uninstall.sh` which removes the `.desktop` file and `launch.bat`.
+On cleanup, users can run `scripts/uninstall.sh` which removes the `.desktop` file and the generated `launch.bat`.
 
 ### 1. CLI Commands
 
@@ -305,7 +308,7 @@ execSync(`npx electron ${path.join(__dirname, '..')}`, { stdio: 'inherit' });
 
 ### 2. Desktop Shortcut (WSLg)
 
-Generated during `npm link` setup. Creates a `.desktop` file at `~/.local/share/applications/port-manager.desktop`:
+Generated during `npm run setup`. Creates a `.desktop` file at `~/.local/share/applications/port-manager.desktop`:
 
 ```ini
 [Desktop Entry]
@@ -359,7 +362,6 @@ port-manager/
 │   └── uninstall.sh         # Removes generated launchers
 ├── assets/
 │   └── icon.png             # App icon
-├── launch.bat               # Windows launcher
 ├── docs/
 │   └── superpowers/
 │       └── specs/
@@ -382,7 +384,7 @@ port-manager/
 | ss command fails          | Show "WSL ports unavailable" warning             |
 | Permission denied on kill | Toast: "Cannot stop — insufficient permissions" |
 | Process already exited    | Silent success, removed on next refresh          |
-| Scan timeout              | Show stale data with "scan failed" indicator     |
+| Scan timeout              | Clear stale data for that source, show error banner |
 
 ## Testing Strategy
 
