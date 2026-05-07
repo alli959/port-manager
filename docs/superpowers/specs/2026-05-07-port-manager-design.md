@@ -63,13 +63,18 @@ A standalone Electron desktop app that displays all open ports across both WSL a
 
 ## Port Scanning
 
+### Scope
+
+The app scans for **all TCP and UDP connections** in any state (LISTEN, ESTABLISHED, TIME_WAIT, CLOSE_WAIT, etc.) across both WSL and Windows. This gives a complete picture of what is using ports on the system.
+
 ### WSL Ports
 
-Run `ss -tlnp` and `ss -ulnp` to capture TCP and UDP listening ports:
+Run `ss -tlnp` and `ss -ulnp` to capture TCP and UDP ports:
 
 ```
-ss -tlnp 2>/dev/null
-ss -ulnp 2>/dev/null
+ss -tlnp 2>/dev/null    # TCP listening
+ss -ulnp 2>/dev/null    # UDP listening
+ss -tnp 2>/dev/null     # TCP all states (includes ESTABLISHED, TIME_WAIT, etc.)
 ```
 
 Parse output to extract: state, local address, port, PID, process name.
@@ -78,14 +83,20 @@ Parse output to extract: state, local address, port, PID, process name.
 
 Run via `powershell.exe`:
 
+**TCP:**
 ```powershell
 Get-NetTCPConnection | Select-Object LocalAddress,LocalPort,State,OwningProcess | ConvertTo-Json
 ```
 
-Then resolve process names:
+**UDP:**
+```powershell
+Get-NetUDPEndpoint | Select-Object LocalAddress,LocalPort,OwningProcess | ConvertTo-Json
+```
+
+Then resolve process names in a single batch call:
 
 ```powershell
-Get-Process -Id <PID> | Select-Object Id,ProcessName | ConvertTo-Json
+Get-Process -Id <PID1>,<PID2>,... | Select-Object Id,ProcessName | ConvertTo-Json
 ```
 
 ### Data Model
@@ -97,16 +108,20 @@ interface PortEntry {
   port: number;
   protocol: 'TCP' | 'UDP';
   localAddress: string;
-  state: string;          // LISTEN, ESTABLISHED, TIME_WAIT, etc.
-  pid: number;
-  processName: string;
+  state: string;          // LISTEN, ESTABLISHED, TIME_WAIT, etc. UDP uses '*' (stateless)
+  pid: number | null;     // null when PID cannot be resolved (e.g., kernel threads, permission denied)
+  processName: string;    // '<unknown>' when process name cannot be resolved
   source: 'WSL' | 'Windows';
 }
 ```
 
+When `pid` is `null` or `processName` is `'<unknown>'`:
+- The table displays "—" for PID and/or "Unknown" with a muted style for Process
+- The Stop button is **disabled** (greyed out, with tooltip: "Cannot stop — unknown process")
+
 ### Deduplication
 
-Ports that appear in both WSL and Windows scans (due to WSL port forwarding) are shown as separate rows but visually grouped or annotated.
+Ports forwarded by WSL appear in both WSL and Windows scans. These are shown as **separate rows** — each tagged with its source badge (WSL / Windows). No grouping or merging is performed; the user can filter by source to isolate one environment.
 
 ## UI Design
 
@@ -170,7 +185,55 @@ CSS custom properties for all colors:
 
 Three theme files: `dark.css`, `light.css`, system detection via `prefers-color-scheme`.
 
+## IPC Contracts
+
+The preload script (`preload.js`) exposes the following API to the renderer via `contextBridge.exposeInMainWorld('portManager', ...)`:
+
+### Channels (Renderer → Main)
+
+| Channel          | Payload                  | Response                          |
+|------------------|--------------------------|-----------------------------------|
+| `scan-ports`     | none                     | `{ ports: PortEntry[], errors: ScanError[] }` |
+| `kill-process`   | `{ pid: number, source: 'WSL' \| 'Windows' }` | `{ success: boolean, error?: string }` |
+| `get-settings`   | none                     | `Settings`                        |
+| `set-settings`   | `Partial<Settings>`      | `Settings` (updated)              |
+
+### Types
+
+```typescript
+interface ScanError {
+  source: 'WSL' | 'Windows';
+  message: string;   // e.g., "PowerShell not found", "ss command failed"
+}
+
+interface Settings {
+  theme: 'dark' | 'light' | 'system';
+  refreshInterval: number;   // milliseconds (1000, 3000, 5000, 10000, 30000, 0 = off)
+  confirmBeforeStop: boolean;
+}
+```
+
+### Partial Failure Behavior
+
+Scanning runs WSL and Windows scans in parallel. If one fails:
+- The successful scan's results are returned normally in `ports`
+- The failed scan produces a `ScanError` in `errors`
+- The renderer shows a warning banner for the failed source (e.g., "⚠ Windows ports unavailable") while still displaying the working source's data
+- On next refresh, the failed source is retried
+
+### State Ownership
+
+| State                  | Owner               |
+|------------------------|----------------------|
+| Port data (raw)        | Main process (scanner) |
+| Sort column/direction  | Renderer (table.js)  |
+| Filter text/dropdowns  | Renderer (table.js)  |
+| Refresh timer          | Renderer (app.js)    |
+| Settings               | Main process (electron-store), synced to renderer on change |
+
 ## Process Killing
+
+Kill is always **forceful** (`kill -9` for WSL, `Stop-Process -Force` for Windows). No graceful-first fallback — the user explicitly chose to stop the process.
 
 ### WSL Processes
 
@@ -219,27 +282,29 @@ execSync(`npx electron ${path.join(__dirname, '..')}`, { stdio: 'inherit' });
 
 ### 2. Desktop Shortcut (WSLg)
 
-Generate a `.desktop` file at `~/.local/share/applications/port-manager.desktop`:
+Generated during `npm link` setup. Creates a `.desktop` file at `~/.local/share/applications/port-manager.desktop`:
 
 ```ini
 [Desktop Entry]
 Name=Port Manager
-Exec=/path/to/port-manager/bin/cli.js
-Icon=/path/to/port-manager/assets/icon.png
+Exec=RESOLVED_PATH/bin/cli.js
+Icon=RESOLVED_PATH/assets/icon.png
 Type=Application
 Categories=Development;System;
 ```
 
+Where `RESOLVED_PATH` is dynamically resolved to the actual install path at link time (e.g., `/home/alexanderg/port-manager`).
+
 ### 3. Windows Shortcut
 
-A `launch.bat` file in the project root:
+A `launch.bat` file is generated in the project root with the resolved WSL path:
 
 ```batch
 @echo off
-wsl -e bash -c "cd ~/port-manager && npm start"
+wsl -e bash -lc "RESOLVED_PATH/bin/cli.js"
 ```
 
-User can pin this to taskbar or create a desktop shortcut.
+Where `RESOLVED_PATH` is the absolute path resolved at install time. User can copy this to their Desktop or pin to taskbar.
 
 ## File Structure
 
