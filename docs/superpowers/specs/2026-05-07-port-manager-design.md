@@ -65,7 +65,7 @@ A standalone Electron desktop app that displays all open ports across both WSL a
 
 ### Scope
 
-The app scans for **all TCP and UDP connections** in any state (LISTEN, ESTABLISHED, TIME_WAIT, CLOSE_WAIT, etc.) across both WSL and Windows. This gives a complete picture of what is using ports on the system.
+The app scans for **listening TCP and UDP ports** across both WSL and Windows. This answers the question "what is using my ports right now?" — which is the primary use case. Non-listening states (ESTABLISHED, TIME_WAIT, etc.) are excluded to keep the table focused and actionable.
 
 ### WSL Ports
 
@@ -74,7 +74,6 @@ Run `ss -tlnp` and `ss -ulnp` to capture TCP and UDP ports:
 ```
 ss -tlnp 2>/dev/null    # TCP listening
 ss -ulnp 2>/dev/null    # UDP listening
-ss -tnp 2>/dev/null     # TCP all states (includes ESTABLISHED, TIME_WAIT, etc.)
 ```
 
 Parse output to extract: state, local address, port, PID, process name.
@@ -83,9 +82,9 @@ Parse output to extract: state, local address, port, PID, process name.
 
 Run via `powershell.exe`:
 
-**TCP:**
+**TCP (listening only):**
 ```powershell
-Get-NetTCPConnection | Select-Object LocalAddress,LocalPort,State,OwningProcess | ConvertTo-Json
+Get-NetTCPConnection -State Listen | Select-Object LocalAddress,LocalPort,State,OwningProcess | ConvertTo-Json
 ```
 
 **UDP:**
@@ -108,7 +107,7 @@ interface PortEntry {
   port: number;
   protocol: 'TCP' | 'UDP';
   localAddress: string;
-  state: string;          // LISTEN, ESTABLISHED, TIME_WAIT, etc. UDP uses '*' (stateless)
+  state: string;          // LISTEN for TCP, '*' for UDP (stateless)
   pid: number | null;     // null when PID cannot be resolved (e.g., kernel threads, permission denied)
   processName: string;    // '<unknown>' when process name cannot be resolved
   source: 'WSL' | 'Windows';
@@ -140,9 +139,8 @@ Ports forwarded by WSL appear in both WSL and Windows scans. These are shown as 
 
 ### Filtering
 
-- **Search bar**: filters across all text columns (port, process name, address, state)
+- **Search bar**: filters across all text columns (port, process name, address)
 - **Source dropdown**: All / WSL / Windows
-- **State filter**: All / LISTEN / ESTABLISHED / other
 
 ### Sorting
 
@@ -198,6 +196,12 @@ The preload script (`preload.js`) exposes the following API to the renderer via 
 | `get-settings`   | none                     | `Settings`                        |
 | `set-settings`   | `Partial<Settings>`      | `Settings` (updated)              |
 
+### Channels (Main → Renderer)
+
+| Channel              | Payload      | Description                                   |
+|----------------------|--------------|-----------------------------------------------|
+| `settings-changed`   | `Settings`   | Pushed when settings change (e.g., theme via system preference) |
+
 ### Types
 
 ```typescript
@@ -215,11 +219,19 @@ interface Settings {
 
 ### Partial Failure Behavior
 
-Scanning runs WSL and Windows scans in parallel. If one fails:
+Scanning runs WSL and Windows scans in parallel (via `Promise.allSettled`). If one fails:
 - The successful scan's results are returned normally in `ports`
 - The failed scan produces a `ScanError` in `errors`
 - The renderer shows a warning banner for the failed source (e.g., "⚠ Windows ports unavailable") while still displaying the working source's data
 - On next refresh, the failed source is retried
+- If both sources fail, the table shows an empty state with both error banners
+
+### Scan Lifecycle
+
+- Each scan has a **5-second timeout**. If a scan exceeds this, it is killed and produces a `ScanError`
+- Auto-refresh waits for the current scan to complete before scheduling the next one (no overlapping scans)
+- During a scan, the refresh button shows a spinner and is disabled
+- First load triggers an immediate scan; auto-refresh timer starts after the first scan completes
 
 ### State Ownership
 
@@ -229,7 +241,7 @@ Scanning runs WSL and Windows scans in parallel. If one fails:
 | Sort column/direction  | Renderer (table.js)  |
 | Filter text/dropdowns  | Renderer (table.js)  |
 | Refresh timer          | Renderer (app.js)    |
-| Settings               | Main process (electron-store), synced to renderer on change |
+| Settings               | Main process (electron-store), pushed to renderer via `settings-changed` IPC on change |
 
 ## Process Killing
 
@@ -255,6 +267,17 @@ execSync(`powershell.exe -NoProfile -Command "Stop-Process -Id ${pid} -Force"`);
 - Invalid PID: show error toast
 
 ## Launch Methods
+
+### Install Script
+
+A `postinstall` npm script (`scripts/install.sh`) handles launcher generation:
+
+1. Resolves the absolute install path
+2. Generates `~/.local/share/applications/port-manager.desktop` with resolved paths
+3. Generates `launch.bat` in the project root with resolved paths
+4. Makes `bin/cli.js` executable
+
+On cleanup, users can run `scripts/uninstall.sh` which removes the `.desktop` file and `launch.bat`.
 
 ### 1. CLI Commands
 
@@ -331,6 +354,9 @@ port-manager/
 │       ├── table.js         # Sort/filter/render table
 │       ├── settings-ui.js   # Settings panel logic
 │       └── toast.js         # Toast notifications
+├── scripts/
+│   ├── install.sh           # Generates .desktop + launch.bat with resolved paths
+│   └── uninstall.sh         # Removes generated launchers
 ├── assets/
 │   └── icon.png             # App icon
 ├── launch.bat               # Windows launcher
