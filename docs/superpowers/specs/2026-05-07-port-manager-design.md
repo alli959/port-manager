@@ -97,8 +97,10 @@ Get-NetUDPEndpoint | Select-Object LocalAddress,LocalPort,OwningProcess | Conver
 Then resolve process names in a single batch call:
 
 ```powershell
-Get-Process -Id <PID1>,<PID2>,... | Select-Object Id,ProcessName | ConvertTo-Json
+Get-Process -Id <PID1>,<PID2>,... -ErrorAction SilentlyContinue | Select-Object Id,ProcessName | ConvertTo-Json
 ```
+
+If a PID disappears between the connection scan and the name lookup (race condition), that PID is returned with `processName: '<unknown>'`. The `-ErrorAction SilentlyContinue` flag ensures one stale PID doesn't fail the entire batch.
 
 ### Data Model
 
@@ -161,6 +163,8 @@ Ports forwarded by WSL appear in both WSL and Windows scans. These are shown as 
 - Default behavior: confirmation dialog ("Stop process `node` (PID 1234) on port 3000?")
 - Confirmation can be toggled off in settings
 - After stopping: an immediate rescan is triggered (regardless of auto-refresh setting), row disappears from results, toast notification confirms
+- If the kill succeeds but the port still appears after rescan (e.g., socket in TIME_WAIT held by kernel), the row remains — this is correct behavior, not an error
+- If the post-kill rescan itself fails, show the scan error banner as usual
 
 ### Settings Panel
 
@@ -188,6 +192,20 @@ Three theme files: `dark.css`, `light.css`, system detection via `prefers-color-
 ## IPC Contracts
 
 The preload script (`preload.js`) exposes the following API to the renderer via `contextBridge.exposeInMainWorld('portManager', ...)`:
+
+### Preload API (window.portManager)
+
+The preload script exposes this exact API to the renderer:
+
+```typescript
+interface PortManagerAPI {
+  scanPorts(): Promise<{ ports: PortEntry[], errors: ScanError[] }>;
+  killProcess(pid: number, source: 'WSL' | 'Windows'): Promise<{ success: boolean, error?: string }>;
+  getSettings(): Promise<Settings>;
+  setSettings(partial: Partial<Settings>): Promise<Settings>;
+  onSettingsChanged(callback: (settings: Settings) => void): void;
+}
+```
 
 ### Channels (Renderer → Main)
 
@@ -268,6 +286,10 @@ execSync(`powershell.exe -NoProfile -Command "Stop-Process -Id ${pid} -Force"`);
 - Permission denied: show error toast ("Cannot stop system process — run as admin")
 - Process already gone: silently succeed, remove from table on refresh
 - Invalid PID: show error toast
+
+## Distribution Model
+
+This is a **local dev-install** app, not a packaged binary. Users clone the repo, run `npm install && npm link && npm run setup`, and launch via CLI (`pm` / `port-manager`) or generated shortcuts. Packaging as a standalone `.AppImage` or `.exe` is out of scope for v1.
 
 ## Launch Methods
 
@@ -388,6 +410,20 @@ port-manager/
 
 ## Testing Strategy
 
-- **Unit tests**: scanner parsing logic (mock ss/PowerShell output)
-- **Integration tests**: IPC communication between main and renderer
-- **Manual testing**: verify on actual WSL + Windows environment
+- **Unit tests** (scanner parsing):
+  - Parse mock `ss` output with various formats (IPv4, IPv6, missing PID)
+  - Parse mock PowerShell JSON with missing/stale PIDs
+  - Verify `<unknown>` fallback for unresolvable process names
+  - Verify `null` PID handling
+- **Unit tests** (process-manager):
+  - Mock `execSync` to verify correct kill command per source
+  - Verify PID validation rejects non-numeric input
+  - Verify error message for permission denied / process gone
+- **Integration tests** (IPC):
+  - `scanPorts` returns correct shape on success and partial failure
+  - `killProcess` returns success/error correctly
+  - `getSettings` / `setSettings` round-trip
+- **Manual testing**:
+  - Verify on actual WSL + Windows environment
+  - Start known services, confirm they appear, stop them, confirm removal
+  - Test with auto-refresh off — verify kill triggers rescan
