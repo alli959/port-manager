@@ -47,6 +47,30 @@ interface PortEntry {
 | `containerId` | Docker container ID for stop/kill actions (null for non-Docker) |
 | `tunnelTarget` | SSH or kubectl target description (null for non-tunnel) |
 
+### Default Values for Base/Legacy Entries
+
+Entries from WSL, Windows, Linux, and macOS base scanners use these defaults for new fields:
+
+```javascript
+{
+  type: 'listen',
+  mapping: null,
+  containerName: null,
+  containerImage: null,
+  containerId: null,
+  tunnelTarget: null
+}
+```
+
+### Action Button Enable Rules
+
+The Stop/Disconnect button is **enabled** when at least one of these is true:
+- `pid` is not null (regular processes, SSH, kubectl)
+- `containerId` is not null (Docker containers)
+- `portproxyRule` can be derived (PortProxy entries — always have listenAddress + port)
+
+The button is **disabled** (greyed out) only when none of the above apply and no actionable identifier exists.
+
 ## Platform Strategy
 
 ### Platform Detection (`main/platform.js`)
@@ -97,6 +121,8 @@ docker ps --format '{{json .}}'
 - `0.0.0.0:8000-8010->8000-8010/tcp` — port range
 - `4000/tcp` — exposed but not published (skip these)
 
+**Port range handling:** Ranges like `8000-8010->8000-8010/tcp` are expanded into individual entries (one row per port). Each row shows its specific mapping (e.g., port 8000, mapping "→ 8000"; port 8001, mapping "→ 8001"). This keeps the table granular and actionable — stopping the container affects all ports anyway.
+
 **Output per published port:**
 ```javascript
 {
@@ -137,13 +163,26 @@ cat /proc/<pid>/cmdline | tr '\0' ' '
 ps -o args= -p <pid>
 ```
 
-**Parsing `-L` flags:**
+**Windows (native):**
+```powershell
+Get-CimInstance Win32_Process -Filter "Name='ssh.exe'" | Select-Object ProcessId,CommandLine | ConvertTo-Json
+```
+
+**Parsing `-L` flags (local forward — in scope):**
 - `-L 3000:localhost:4000` → port 3000, mapping "→ localhost:4000"
 - `-L 3000:remotehost:4000` → port 3000, mapping "→ remotehost:4000"
 - `-L [bind_address:]port:host:hostport` (full format)
+- Multiple `-L` flags on one SSH command produce multiple entries (one row per forward)
 
-**Parsing `-R` flags:**
-- `-R 4000:localhost:3000` → remote port 4000 forwards to local 3000 (shown as informational)
+**Parsing `-R` flags (remote forward — informational only):**
+- `-R 4000:localhost:3000` → Shows as port 3000 (local end), mapping "← remote:4000", type "forward"
+- Only shown if the local end is detectable; purely remote-side forwards with no local port are out of scope
+
+**`-D` flag (SOCKS proxy — in scope):**
+- `-D 1080` → port 1080, mapping "SOCKS proxy", type "forward"
+- SOCKS proxies occupy a local port and are actionable (kill SSH process to close)
+
+**Out of scope:** Remote-only forwards where no local port is bound (these aren't visible locally anyway).
 
 **Output:**
 ```javascript
@@ -175,10 +214,16 @@ ps aux | grep '[k]ubectl.*port-forward'
 pgrep -f 'kubectl.*port-forward'
 ```
 
+**Windows (native):**
+```powershell
+Get-CimInstance Win32_Process -Filter "Name='kubectl.exe' AND CommandLine LIKE '%port-forward%'" | Select-Object ProcessId,CommandLine | ConvertTo-Json
+```
+
 **Command parsing examples:**
 - `kubectl port-forward pod/nginx 8080:80` → port 8080, mapping "→ pod/nginx:80"
 - `kubectl port-forward svc/my-service 3000:80` → port 3000, mapping "→ svc/my-service:80"
 - `kubectl port-forward deployment/app 9090:9090` → port 9090, mapping "→ deployment/app:9090"
+- `kubectl port-forward pod/nginx 8080:80 9090:90` → two entries (one per port pair)
 
 **Output:**
 ```javascript
@@ -208,7 +253,7 @@ pgrep -f 'kubectl.*port-forward'
 powershell.exe -NoProfile -Command "netsh interface portproxy show all"
 ```
 
-**Output format:**
+**Output format (includes all address families):**
 ```
 Listen on ipv4:             Connect to ipv4:
 
@@ -216,9 +261,31 @@ Address         Port        Address         Port
 --------------- ----------  --------------- ----------
 0.0.0.0         3000        172.28.176.1    3000
 *               8080        172.28.176.1    8080
+
+Listen on ipv6:             Connect to ipv4:
+
+Address         Port        Address         Port
+--------------- ----------  --------------- ----------
+::              9090        172.28.176.1    9090
 ```
 
-**Parsing:** Extract rows after the header, split into listen address/port and connect address/port.
+**Parsing:** Extract rows after each header section. The `show all` command returns all rule types (v4tov4, v4tov6, v6tov4, v6tov6). The `*` listen address is normalized to `0.0.0.0` for IPv4 sections and `::` for IPv6 sections.
+
+**Address family tracking:** Each entry records which proxy type it belongs to (v4tov4, v4tov6, v6tov4, v6tov6) so the correct `netsh interface portproxy delete` variant can be used for removal.
+
+**KillRequest for PortProxy:**
+```typescript
+portproxyRule?: {
+  listenAddress: string;
+  listenPort: number;
+  proxyType: 'v4tov4' | 'v4tov6' | 'v6tov4' | 'v6tov6';
+}
+```
+
+**Delete command uses the correct variant:**
+```
+netsh interface portproxy delete <proxyType> listenport=X listenaddress=Y
+```
 
 **Output:**
 ```javascript
@@ -239,19 +306,91 @@ Address         Port        Address         Port
 }
 ```
 
+**Security validation:** Listen addresses must be valid IPv4 (`*`, `0.0.0.0`, or dotted-quad) or IPv6 (`::`, or colon-hex format). Ports must be 1-65535.
+
 ### macOS Scanner (`main/macos-scanner.js`)
 
 **Commands:**
 ```bash
-lsof -iTCP -sTCP:LISTEN -nP -F pcnT    # TCP listening
-lsof -iUDP -nP -F pcnT                  # UDP
+lsof -iTCP -sTCP:LISTEN -nP -F pcn    # TCP listening
+lsof -iUDP -nP -F pcn                  # UDP
 ```
 
-**Parsing:** lsof `-F` format outputs field-per-line (p=PID, c=command, n=name, T=TCP info).
+**lsof `-F` output format (field-per-line):**
+```
+p1234          # PID
+cnode          # command name
+n*:3000        # name: *:port (listening on all interfaces)
+n127.0.0.1:8080  # name: addr:port (listening on specific interface)
+p5678
+cnginx
+n[::1]:80
+```
 
-**Output:** Same shape as WSL/Windows entries but with `source: 'macOS'`.
+**Parsing rules:**
+- Lines starting with `p` → new PID context
+- Lines starting with `c` → command/process name for current PID
+- Lines starting with `n` → network name (address:port)
+- Parse address and port from `n` field: split on last `:`, address is everything before, port is everything after
+- `*` address normalized to `0.0.0.0`
+- IPv6 addresses appear in brackets: `[::1]:80` → address `::1`, port `80`
+
+**UDP handling:** Same parsing, but `state` is set to `*` (stateless) and no `-sTCP:LISTEN` filter applies.
+
+**Failure cases:**
+- `lsof` not found → ScanError (should never happen on macOS, but handle)
+- Permission denied (non-root can't see all PIDs) → partial results returned, no error (lsof shows what it can)
+- Malformed lines → skip and continue
+
+**Output:** Same normalized PortEntry shape:
+```javascript
+{
+  port: 3000,
+  protocol: 'TCP',
+  localAddress: '0.0.0.0',
+  state: 'LISTEN',
+  pid: 1234,
+  processName: 'node',
+  source: 'macOS',
+  type: 'listen',
+  mapping: null,
+  containerName: null,
+  containerImage: null,
+  containerId: null,
+  tunnelTarget: null
+}
+```
+
+### Linux Scanner (`main/linux-scanner.js`)
+
+The Linux scanner is functionally identical to the WSL scanner (uses `ss -tlnp` and `ss -ulnp`) but emits `source: 'Linux'` instead of `source: 'WSL'`. It reuses the same `parseSSOutput` and `parseSSLine` functions from the existing scanner module, with only the source label differing.
+
+```javascript
+async function scanLinux() {
+  const [tcpResult, udpResult] = await Promise.all([
+    execAsync('ss -tlnp 2>/dev/null', { timeout: SCAN_TIMEOUT_MS }),
+    execAsync('ss -ulnp 2>/dev/null', { timeout: SCAN_TIMEOUT_MS })
+  ]);
+
+  return [
+    ...parseSSOutput(tcpResult.stdout, 'TCP').map(e => ({ ...e, source: 'Linux' })),
+    ...parseSSOutput(udpResult.stdout, 'UDP').map(e => ({ ...e, source: 'Linux' }))
+  ];
+}
+```
 
 ## Scanner Orchestration
+
+### Deduplication & Overlap Policy
+
+A port can appear from multiple sources simultaneously. For example:
+- Docker publishes port 3000 → appears in both the base scan (WSL/Windows/Linux) AND the Docker scanner
+- An SSH tunnel on port 8080 → appears in both the base scan AND the SSH scanner
+- A kubectl port-forward → appears in both the base scan AND the Kubernetes scanner
+
+**Policy: Keep all rows, no merging.** Each source produces its own entries. The user can see that port 3000 shows up as both a "WSL" listen and a "Docker" forward — this is accurate and informative. The Source and Type filters let users isolate what they care about.
+
+**Rationale:** Merging would lose information (is it a Docker port? an SSH tunnel? both?) and make the code significantly more complex for unclear UX benefit. Showing separate rows with distinct source badges is clear and truthful.
 
 ### Updated `scanPorts()` in `main/scanner.js`
 
@@ -337,6 +476,10 @@ Populated at startup based on platform detection. Only shows sources relevant to
 - Direct (entries where `type === 'listen'`)
 - Forwarded (entries where `type === 'forward'`)
 
+### Search Scope
+
+The search bar filters across: port number, process name, local address, mapping text, container name, container image, and tunnel target. All text-based fields are included so users can search "nginx" and find both regular nginx processes and Docker containers running nginx.
+
 ### Source Badges (visual)
 
 Each source gets a distinct badge color:
@@ -384,7 +527,7 @@ interface KillRequest {
   pid: number | null;
   source: 'WSL' | 'Windows' | 'Linux' | 'macOS' | 'Docker' | 'SSH' | 'Kubernetes' | 'PortProxy';
   containerId?: string;
-  portproxyRule?: { listenAddress: string; listenPort: number };
+  portproxyRule?: { listenAddress: string; listenPort: number; proxyType: 'v4tov4' | 'v4tov6' | 'v6tov4' | 'v6tov6' };
 }
 ```
 
@@ -397,7 +540,7 @@ interface KillRequest {
 | Docker | `docker stop -t 10 <id>`, escalate to `docker kill <id>` | 15s |
 | SSH | `kill -9 <pid>` | 5s |
 | Kubernetes | `kill -9 <pid>` | 5s |
-| PortProxy | `netsh interface portproxy delete v4tov4 listenport=X listenaddress=Y` | 5s |
+| PortProxy | `netsh interface portproxy delete <proxyType> listenport=X listenaddress=Y` | 5s |
 
 ### Docker Stop Flow
 
@@ -447,7 +590,7 @@ async function stopContainer(containerId) {
 
 - **Container ID validation:** Only hex characters, minimum 12 chars
 - **PID validation:** Only positive integers (existing)
-- **Port proxy validation:** Only numeric ports (1-65535) + valid IPv4 addresses
+- **Port proxy validation:** Only numeric ports (1-65535) + valid IPv4 addresses or IPv6 addresses (colon-hex format)
 - **No shell injection:** All dynamic values validated with strict patterns before interpolation
 - **Principle of least privilege:** No admin/sudo required for read-only scanning; kill actions may require elevated permissions and report clearly if denied
 
@@ -485,6 +628,7 @@ main/
 ├── k8s-scanner.js          # NEW: kubectl port-forward detection
 ├── portproxy-scanner.js    # NEW: netsh portproxy rules
 ├── macos-scanner.js        # NEW: macOS lsof-based scanning
+├── linux-scanner.js        # NEW: Native Linux ss-based scanning (reuses parseSSOutput)
 ├── process-manager.js      # Updated: Docker stop, portproxy delete
 ├── ...
 tests/
@@ -493,6 +637,7 @@ tests/
 ├── k8s-scanner.test.js     # NEW
 ├── portproxy-scanner.test.js # NEW
 ├── macos-scanner.test.js   # NEW
+├── linux-scanner.test.js   # NEW
 ├── platform.test.js        # NEW
 ├── ...
 ```
