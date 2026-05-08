@@ -16,18 +16,54 @@ const { getPlatform } = require('../main/platform');
 const { scanWindows, scanPorts, getScanners } = require('../main/scanner');
 
 describe('getScanners', () => {
-  test('wsl returns WSL and Windows scanners', () => {
+  test('wsl returns WSL, Windows, and cross-platform scanners', () => {
     const scanners = getScanners('wsl');
     const names = scanners.map(s => s.name);
     expect(names).toContain('WSL');
     expect(names).toContain('Windows');
+    expect(names).toContain('Docker');
+    expect(names).toContain('SSH');
+    expect(names).toContain('Kubernetes');
+    expect(names).toContain('PortProxy');
   });
 
-  test('windows returns only Windows scanner', () => {
+  test('windows returns Windows, PortProxy, and cross-platform scanners', () => {
     const scanners = getScanners('windows');
     const names = scanners.map(s => s.name);
     expect(names).toContain('Windows');
+    expect(names).toContain('PortProxy');
+    expect(names).toContain('Docker');
+    expect(names).toContain('SSH');
+    expect(names).toContain('Kubernetes');
     expect(names).not.toContain('WSL');
+    expect(names).not.toContain('macOS');
+    expect(names).not.toContain('Linux');
+  });
+
+  test('macos returns macOS and cross-platform scanners', () => {
+    const scanners = getScanners('macos');
+    const names = scanners.map(s => s.name);
+    expect(names).toContain('macOS');
+    expect(names).toContain('Docker');
+    expect(names).toContain('SSH');
+    expect(names).toContain('Kubernetes');
+    expect(names).not.toContain('WSL');
+    expect(names).not.toContain('Windows');
+    expect(names).not.toContain('PortProxy');
+    expect(names).not.toContain('Linux');
+  });
+
+  test('linux returns Linux and cross-platform scanners', () => {
+    const scanners = getScanners('linux');
+    const names = scanners.map(s => s.name);
+    expect(names).toContain('Linux');
+    expect(names).toContain('Docker');
+    expect(names).toContain('SSH');
+    expect(names).toContain('Kubernetes');
+    expect(names).not.toContain('WSL');
+    expect(names).not.toContain('Windows');
+    expect(names).not.toContain('PortProxy');
+    expect(names).not.toContain('macOS');
   });
 
   test('unknown platform still includes cross-platform scanners', () => {
@@ -38,6 +74,16 @@ describe('getScanners', () => {
     expect(names).toContain('Kubernetes');
     expect(names).not.toContain('WSL');
     expect(names).not.toContain('Windows');
+  });
+
+  test('all scanners have name and scan function', () => {
+    const scanners = getScanners('wsl');
+    scanners.forEach(s => {
+      expect(s).toHaveProperty('name');
+      expect(s).toHaveProperty('scan');
+      expect(typeof s.name).toBe('string');
+      expect(typeof s.scan).toBe('function');
+    });
   });
 });
 
