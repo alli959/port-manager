@@ -50,7 +50,48 @@ function parseSSOutput(output, protocol) {
   return entries;
 }
 
+function parseWindowsTCP(json) {
+  if (!json || !Array.isArray(json)) return [];
+
+  return json.map((entry) => ({
+    port: entry.LocalPort,
+    protocol: 'TCP',
+    localAddress: entry.LocalAddress,
+    state: 'LISTEN',
+    pid: entry.OwningProcess || null,
+    processName: '<unknown>',
+    source: 'Windows'
+  }));
+}
+
+function parseWindowsUDP(json) {
+  if (!json || !Array.isArray(json)) return [];
+
+  return json.map((entry) => ({
+    port: entry.LocalPort,
+    protocol: 'UDP',
+    localAddress: entry.LocalAddress,
+    state: '*',
+    pid: entry.OwningProcess || null,
+    processName: '<unknown>',
+    source: 'Windows'
+  }));
+}
+
+function resolveProcessNames(entries, processMap) {
+  return entries.map((entry) => {
+    if (entry.pid && processMap[entry.pid]) {
+      return { ...entry, processName: processMap[entry.pid] };
+    }
+
+    return entry;
+  });
+}
+
 module.exports = {
   parseSSLine,
-  parseSSOutput
+  parseSSOutput,
+  parseWindowsTCP,
+  parseWindowsUDP,
+  resolveProcessNames
 };
