@@ -30,8 +30,13 @@ function setupIPC() {
     return scanPorts();
   });
 
-  ipcMain.handle('kill-process', async (_event, { pid, source }) => {
-    return killProcess(pid, source);
+  ipcMain.handle('kill-process', async (_event, request) => {
+    return killProcess(request);
+  });
+
+  ipcMain.handle('get-platform', () => {
+    const { getPlatform } = require('./platform');
+    return getPlatform();
   });
 
   ipcMain.handle('get-settings', async () => {

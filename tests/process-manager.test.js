@@ -1,8 +1,10 @@
 const { killProcess, validatePid } = require('../main/process-manager');
 
 jest.mock('child_process', () => ({
-  execSync: jest.fn()
+  execSync: jest.fn(),
+  exec: jest.fn()
 }));
+jest.mock('../main/platform', () => ({ getPlatform: jest.fn(() => 'wsl') }));
 
 const { execSync } = require('child_process');
 
@@ -78,12 +80,15 @@ describe('killProcess', () => {
     expect(result).toEqual({ success: false, error: 'Cannot stop — insufficient permissions' });
   });
 
-  test('rejects invalid PID', async () => {
-    await expect(killProcess('abc', 'WSL')).rejects.toThrow('Invalid PID');
+  test('kills Linux process with kill -9', async () => {
+    execSync.mockReturnValue('');
+    const result = await killProcess(1234, 'Linux');
+    expect(execSync).toHaveBeenCalledWith('kill -9 1234', { stdio: 'pipe' });
+    expect(result).toEqual({ success: true });
   });
 
   test('returns error for unknown source', async () => {
-    const result = await killProcess(1234, 'Linux');
-    expect(result).toEqual({ success: false, error: 'Unknown source: Linux' });
+    const result = await killProcess(1234, 'UnknownOS');
+    expect(result).toEqual({ success: false, error: 'Unknown source: UnknownOS' });
   });
 });
