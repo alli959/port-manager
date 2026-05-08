@@ -20,7 +20,14 @@ describe('parseSSOutput - TCP', () => {
       state: 'LISTEN',
       pid: 1234,
       processName: 'node',
-      source: 'WSL'
+      source: 'WSL',
+      type: 'listen',
+      mapping: null,
+      containerName: null,
+      containerImage: null,
+      containerId: null,
+      tunnelTarget: null,
+      proxyType: null
     });
     expect(entries[1]).toEqual({
       port: 5432,
@@ -29,7 +36,14 @@ describe('parseSSOutput - TCP', () => {
       state: 'LISTEN',
       pid: 5678,
       processName: 'postgres',
-      source: 'WSL'
+      source: 'WSL',
+      type: 'listen',
+      mapping: null,
+      containerName: null,
+      containerImage: null,
+      containerId: null,
+      tunnelTarget: null,
+      proxyType: null
     });
   });
 
@@ -86,7 +100,14 @@ describe('parseSSOutput - UDP', () => {
       state: '*',
       pid: 1001,
       processName: 'dnsmasq',
-      source: 'WSL'
+      source: 'WSL',
+      type: 'listen',
+      mapping: null,
+      containerName: null,
+      containerImage: null,
+      containerId: null,
+      tunnelTarget: null,
+      proxyType: null
     });
   });
 });
@@ -123,7 +144,14 @@ describe('parseWindowsTCP', () => {
       state: 'LISTEN',
       pid: 4,
       processName: '<unknown>',
-      source: 'Windows'
+      source: 'Windows',
+      type: 'listen',
+      mapping: null,
+      containerName: null,
+      containerImage: null,
+      containerId: null,
+      tunnelTarget: null,
+      proxyType: null
     });
   });
 
@@ -163,7 +191,14 @@ describe('parseWindowsUDP', () => {
       state: '*',
       pid: 1001,
       processName: '<unknown>',
-      source: 'Windows'
+      source: 'Windows',
+      type: 'listen',
+      mapping: null,
+      containerName: null,
+      containerImage: null,
+      containerId: null,
+      tunnelTarget: null,
+      proxyType: null
     });
   });
 

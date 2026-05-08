@@ -30,6 +30,13 @@ function parseSSLine(line, protocol) {
   }
 
   return {
+    type: 'listen',
+    mapping: null,
+    containerName: null,
+    containerImage: null,
+    containerId: null,
+    tunnelTarget: null,
+    proxyType: null,
     port,
     protocol,
     localAddress,
@@ -58,6 +65,13 @@ function parseWindowsTCP(json) {
   if (!json || !Array.isArray(json)) return [];
 
   return json.map((entry) => ({
+    type: 'listen',
+    mapping: null,
+    containerName: null,
+    containerImage: null,
+    containerId: null,
+    tunnelTarget: null,
+    proxyType: null,
     port: entry.LocalPort,
     protocol: 'TCP',
     localAddress: entry.LocalAddress,
@@ -72,6 +86,13 @@ function parseWindowsUDP(json) {
   if (!json || !Array.isArray(json)) return [];
 
   return json.map((entry) => ({
+    type: 'listen',
+    mapping: null,
+    containerName: null,
+    containerImage: null,
+    containerId: null,
+    tunnelTarget: null,
+    proxyType: null,
     port: entry.LocalPort,
     protocol: 'UDP',
     localAddress: entry.LocalAddress,
