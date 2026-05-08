@@ -1,0 +1,16 @@
+:root {
+  --bg-primary: #1a1a2e;
+  --bg-secondary: #16213e;
+  --bg-row-hover: #1a1a3e;
+  --text-primary: #e0e0e0;
+  --text-secondary: #a0a0b0;
+  --accent: #4fc3f7;
+  --danger: #ef5350;
+  --border: #2a2a4a;
+  --bg-input: #0f1424;
+  --bg-badge-wsl: #2e7d32;
+  --bg-badge-windows: #1565c0;
+  --bg-toast: #323248;
+  --bg-settings: #16213e;
+  --shadow: rgba(0, 0, 0, 0.4);
+}
