@@ -33,6 +33,7 @@ interface PortEntry {
   containerImage: string | null;
   containerId: string | null;
   tunnelTarget: string | null;
+  proxyType: 'v4tov4' | 'v4tov6' | 'v6tov4' | 'v6tov6' | null;
 }
 ```
 
@@ -67,9 +68,21 @@ Entries from WSL, Windows, Linux, and macOS base scanners use these defaults for
 The Stop/Disconnect button is **enabled** when at least one of these is true:
 - `pid` is not null (regular processes, SSH, kubectl)
 - `containerId` is not null (Docker containers)
-- `portproxyRule` can be derived (PortProxy entries — always have listenAddress + port)
+- Source is `'PortProxy'` (rule can always be deleted using localAddress + port from the entry)
 
 The button is **disabled** (greyed out) only when none of the above apply and no actionable identifier exists.
+
+### PortProxy Action Data
+
+PortProxy entries don't have a PID, so the renderer constructs the `KillRequest.portproxyRule` from entry fields:
+- `listenAddress` → from `entry.localAddress`
+- `listenPort` → from `entry.port`
+- `proxyType` → stored in a new field `entry.proxyType` (only set for PortProxy entries, null otherwise)
+
+Add to the data model:
+```typescript
+proxyType: 'v4tov4' | 'v4tov6' | 'v6tov4' | 'v6tov6' | null;  // Only set for PortProxy source
+```
 
 ## Platform Strategy
 
@@ -123,6 +136,8 @@ docker ps --format '{{json .}}'
 
 **Port range handling:** Ranges like `8000-8010->8000-8010/tcp` are expanded into individual entries (one row per port). Each row shows its specific mapping (e.g., port 8000, mapping "→ 8000"; port 8001, mapping "→ 8001"). This keeps the table granular and actionable — stopping the container affects all ports anyway.
 
+**Multi-mapping / dual-stack:** A container can publish the same port on both IPv4 and IPv6 (e.g., `0.0.0.0:3000->4000/tcp, :::3000->4000/tcp`). The `Ports` field is comma-separated — split on `, ` first, then parse each mapping independently. Each produces its own row.
+
 **Output per published port:**
 ```javascript
 {
@@ -146,27 +161,33 @@ docker ps --format '{{json .}}'
 
 ### SSH Scanner (`main/ssh-scanner.js`)
 
-**Detection strategy:**
+**Detection strategy — self-contained (no base scan dependency):**
 
-1. On Linux/WSL/macOS: find SSH processes listening on ports
-2. Read process command line to identify forwarding flags
+The SSH scanner independently discovers SSH processes with port forwarding. It does NOT rely on output from the base scanner.
 
-**Linux/WSL:**
+**Step 1 — Find SSH processes:**
+
+Linux/WSL:
 ```bash
-# Find SSH PIDs from ss output (already available from base scan)
-# Then read /proc/<pid>/cmdline for forwarding flags
-cat /proc/<pid>/cmdline | tr '\0' ' '
+pgrep -a ssh
+```
+Returns PIDs and command snippets. Filter for processes that contain `-L`, `-R`, or `-D` flags.
+
+macOS:
+```bash
+ps -eo pid,args | grep '[s]sh.*-[LRD]'
 ```
 
-**macOS fallback:**
-```bash
-ps -o args= -p <pid>
-```
-
-**Windows (native):**
+Windows (native):
 ```powershell
 Get-CimInstance Win32_Process -Filter "Name='ssh.exe'" | Select-Object ProcessId,CommandLine | ConvertTo-Json
 ```
+
+**Step 2 — Read full command line:**
+
+Linux/WSL: `/proc/<pid>/cmdline` (null-separated) for processes found in step 1.
+macOS: Already have full args from `ps -eo pid,args`.
+Windows: Already have `CommandLine` from Get-CimInstance.
 
 **Parsing `-L` flags (local forward — in scope):**
 - `-L 3000:localhost:4000` → port 3000, mapping "→ localhost:4000"
@@ -174,15 +195,14 @@ Get-CimInstance Win32_Process -Filter "Name='ssh.exe'" | Select-Object ProcessId
 - `-L [bind_address:]port:host:hostport` (full format)
 - Multiple `-L` flags on one SSH command produce multiple entries (one row per forward)
 
-**Parsing `-R` flags (remote forward — informational only):**
-- `-R 4000:localhost:3000` → Shows as port 3000 (local end), mapping "← remote:4000", type "forward"
-- Only shown if the local end is detectable; purely remote-side forwards with no local port are out of scope
+**Parsing `-R` flags (remote forward — out of scope):**
+- `-R` forwards do NOT create entries. The remote side listens, not the local machine. SSH doesn't bind a local port for `-R`, so there's nothing to show in the port table. (The local target service, if any, will already appear via the base scanner.)
 
 **`-D` flag (SOCKS proxy — in scope):**
 - `-D 1080` → port 1080, mapping "SOCKS proxy", type "forward"
 - SOCKS proxies occupy a local port and are actionable (kill SSH process to close)
 
-**Out of scope:** Remote-only forwards where no local port is bound (these aren't visible locally anyway).
+**Out of scope:** `-R` remote forwards (no local port bound), SSH connections without forwarding flags.
 
 **Output:**
 ```javascript
@@ -513,10 +533,12 @@ Each source gets a distinct badge color:
 ### Confirmation Dialog Messages
 
 - Regular: "Stop process `node` (PID 1234) on port 3000?"
-- Docker: "Stop container `my-app` (nginx:latest) on port 3000?"
-- SSH: "Disconnect SSH tunnel on port 3000 → remotehost:4000?"
-- kubectl: "Disconnect port-forward on port 8080 → pod/nginx:80?"
+- Docker: "Stop container `my-app` (nginx:latest)? This will close ports 3000, 4000, 8080."
+- SSH: "Disconnect SSH tunnel (PID 5678)? This will close ports 3000, 8080." (lists all forwards from same SSH process)
+- kubectl: "Disconnect port-forward (PID 7890)? This will close ports 8080, 9090." (lists all forwards from same kubectl process)
 - PortProxy: "Remove port proxy rule 0.0.0.0:3000 → 172.28.0.1:3000?"
+
+**Sibling row awareness:** When a Docker container or SSH/kubectl process has multiple port entries, the confirmation dialog lists ALL affected ports so the user knows that stopping one entry removes sibling rows too. After the action, an immediate rescan will naturally remove all related rows.
 
 ## Process Management
 
@@ -568,11 +590,12 @@ async function stopContainer(containerId) {
 |----------|----------|
 | Tool not installed (docker, kubectl) | Silent skip — empty results, no error |
 | Tool exists but fails | ScanError produced, other scanners unaffected |
-| Permission denied | ScanError with descriptive message |
+| Permission denied (scan fails entirely) | ScanError with descriptive message |
+| Permission limited (partial results) | Return available results, no error (applies to macOS lsof and Linux ss without root) |
 | Scan timeout (5s per scanner) | Scanner killed, ScanError, previous data cleared |
 | Docker daemon not running | Silent skip (detected via docker ps failure with specific exit code) |
 
-**Key principle:** A missing tool is silence; a broken tool is a warning.
+**Key principle:** A missing tool is silence; a broken tool is a warning; a tool with limited permissions returns what it can without complaining.
 
 ### Kill Error Handling
 
