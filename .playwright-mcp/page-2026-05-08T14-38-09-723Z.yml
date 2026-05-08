@@ -1,0 +1,144 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - heading "âš¡ Port Manager" [level=1] [ref=e3]
+    - generic [ref=e4]:
+      - textbox "Search ports, processes..." [ref=e5]
+      - combobox [ref=e6]:
+        - option "All Sources" [selected]
+      - combobox [ref=e7]:
+        - option "All Types" [selected]
+      - generic [ref=e8] [cursor=pointer]: â†»
+      - generic [ref=e9] [cursor=pointer]: âš™
+  - table [ref=e11]:
+    - rowgroup [ref=e12]:
+      - row "Port Mapping Protocol Local Address State PID Process Source Actions" [ref=e13]:
+        - columnheader "Port" [ref=e14]
+        - columnheader "Mapping" [ref=e15]
+        - columnheader "Protocol" [ref=e16]
+        - columnheader "Local Address" [ref=e17]
+        - columnheader "State" [ref=e18]
+        - columnheader "PID" [ref=e19]
+        - columnheader "Process" [ref=e20]
+        - columnheader "Source" [ref=e21]
+        - columnheader "Actions" [ref=e22]
+    - rowgroup [ref=e23]:
+      - row "3000 â†’ 3000 TCP 0.0.0.0 LISTEN â€” next-app Docker Stop Container" [ref=e24]:
+        - cell "3000" [ref=e25]
+        - cell "â†’ 3000" [ref=e26]
+        - cell "TCP" [ref=e27]
+        - cell "0.0.0.0" [ref=e28]
+        - cell "LISTEN" [ref=e29]
+        - cell "â€”" [ref=e30]
+        - cell "next-app" [ref=e31]
+        - cell "Docker" [ref=e32]:
+          - generic [ref=e33]: Docker
+        - cell "Stop Container" [ref=e34]:
+          - button "Stop Container" [ref=e35] [cursor=pointer]
+      - row "5432 â†’ 5432 TCP 0.0.0.0 LISTEN â€” postgres:16 Docker Stop Container" [ref=e36]:
+        - cell "5432" [ref=e37]
+        - cell "â†’ 5432" [ref=e38]
+        - cell "TCP" [ref=e39]
+        - cell "0.0.0.0" [ref=e40]
+        - cell "LISTEN" [ref=e41]
+        - cell "â€”" [ref=e42]
+        - cell "postgres:16" [ref=e43]
+        - cell "Docker" [ref=e44]:
+          - generic [ref=e45]: Docker
+        - cell "Stop Container" [ref=e46]:
+          - button "Stop Container" [ref=e47] [cursor=pointer]
+      - row "8080 â†’ 80 TCP 127.0.0.1 LISTEN 4521 ssh SSH Disconnect" [ref=e48]:
+        - cell "8080" [ref=e49]
+        - cell "â†’ 80" [ref=e50]
+        - cell "TCP" [ref=e51]
+        - cell "127.0.0.1" [ref=e52]
+        - cell "LISTEN" [ref=e53]
+        - cell "4521" [ref=e54]
+        - cell "ssh" [ref=e55]
+        - cell "SSH" [ref=e56]:
+          - generic [ref=e57]: SSH
+        - cell "Disconnect" [ref=e58]:
+          - button "Disconnect" [ref=e59] [cursor=pointer]
+      - row "9090 â†’ 9090 TCP 127.0.0.1 LISTEN 7832 kubectl Kubernetes Disconnect" [ref=e60]:
+        - cell "9090" [ref=e61]
+        - cell "â†’ 9090" [ref=e62]
+        - cell "TCP" [ref=e63]
+        - cell "127.0.0.1" [ref=e64]
+        - cell "LISTEN" [ref=e65]
+        - cell "7832" [ref=e66]
+        - cell "kubectl" [ref=e67]
+        - cell "Kubernetes" [ref=e68]:
+          - generic [ref=e69]: Kubernetes
+        - cell "Disconnect" [ref=e70]:
+          - button "Disconnect" [ref=e71] [cursor=pointer]
+      - row "3001 â€” TCP 127.0.0.1 LISTEN 2341 node WSL Stop" [ref=e72]:
+        - cell "3001" [ref=e73]
+        - cell "â€”" [ref=e74]
+        - cell "TCP" [ref=e75]
+        - cell "127.0.0.1" [ref=e76]
+        - cell "LISTEN" [ref=e77]
+        - cell "2341" [ref=e78]
+        - cell "node" [ref=e79]
+        - cell "WSL" [ref=e80]:
+          - generic [ref=e81]: WSL
+        - cell "Stop" [ref=e82]:
+          - button "Stop" [ref=e83] [cursor=pointer]
+      - row "4200 â€” TCP 0.0.0.0 LISTEN 8823 ng serve WSL Stop" [ref=e84]:
+        - cell "4200" [ref=e85]
+        - cell "â€”" [ref=e86]
+        - cell "TCP" [ref=e87]
+        - cell "0.0.0.0" [ref=e88]
+        - cell "LISTEN" [ref=e89]
+        - cell "8823" [ref=e90]
+        - cell "ng serve" [ref=e91]
+        - cell "WSL" [ref=e92]:
+          - generic [ref=e93]: WSL
+        - cell "Stop" [ref=e94]:
+          - button "Stop" [ref=e95] [cursor=pointer]
+      - row "8443 â†’ 443 TCP 0.0.0.0 LISTEN â€” â€” PortProxy Remove Rule" [ref=e96]:
+        - cell "8443" [ref=e97]
+        - cell "â†’ 443" [ref=e98]
+        - cell "TCP" [ref=e99]
+        - cell "0.0.0.0" [ref=e100]
+        - cell "LISTEN" [ref=e101]
+        - cell "â€”" [ref=e102]
+        - cell "â€”" [ref=e103]
+        - cell "PortProxy" [ref=e104]:
+          - generic [ref=e105]: PortProxy
+        - cell "Remove Rule" [ref=e106]:
+          - button "Remove Rule" [ref=e107] [cursor=pointer]
+      - row "1433 â€” TCP 0.0.0.0 LISTEN 4412 sqlservr.exe Windows Stop" [ref=e108]:
+        - cell "1433" [ref=e109]
+        - cell "â€”" [ref=e110]
+        - cell "TCP" [ref=e111]
+        - cell "0.0.0.0" [ref=e112]
+        - cell "LISTEN" [ref=e113]
+        - cell "4412" [ref=e114]
+        - cell "sqlservr.exe" [ref=e115]
+        - cell "Windows" [ref=e116]:
+          - generic [ref=e117]: Windows
+        - cell "Stop" [ref=e118]:
+          - button "Stop" [ref=e119] [cursor=pointer]
+      - row "5000 â€” TCP 127.0.0.1 LISTEN 9912 dotnet Windows Stop" [ref=e120]:
+        - cell "5000" [ref=e121]
+        - cell "â€”" [ref=e122]
+        - cell "TCP" [ref=e123]
+        - cell "127.0.0.1" [ref=e124]
+        - cell "LISTEN" [ref=e125]
+        - cell "9912" [ref=e126]
+        - cell "dotnet" [ref=e127]
+        - cell "Windows" [ref=e128]:
+          - generic [ref=e129]: Windows
+        - cell "Stop" [ref=e130]:
+          - button "Stop" [ref=e131] [cursor=pointer]
+      - row "6379 â†’ 6379 TCP 0.0.0.0 LISTEN â€” redis:7-alpine Docker Stop Container" [ref=e132]:
+        - cell "6379" [ref=e133]
+        - cell "â†’ 6379" [ref=e134]
+        - cell "TCP" [ref=e135]
+        - cell "0.0.0.0" [ref=e136]
+        - cell "LISTEN" [ref=e137]
+        - cell "â€”" [ref=e138]
+        - cell "redis:7-alpine" [ref=e139]
+        - cell "Docker" [ref=e140]:
+          - generic [ref=e141]: Docker
+        - cell "Stop Container" [ref=e142]:
+          - button "Stop Container" [ref=e143] [cursor=pointer]

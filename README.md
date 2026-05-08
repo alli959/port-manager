@@ -1,111 +1,54 @@
-# Port Manager
+# ⚡ Port Manager
 
-A desktop app to view and manage listening ports across **all sources** — WSL, Windows, Docker, SSH tunnels, kubectl port-forwards, and netsh portproxy rules — in one place.
+See every port on your system in one place — and stop anything with one click.
 
-Built with Electron. Runs on WSL+Windows, macOS, or native Linux.
+Scans **Docker**, **SSH tunnels**, **kubectl port-forwards**, **WSL**, **Windows**, **macOS**, and **Linux** ports simultaneously. Shows port forwarding relationships so you always know what's connected where.
+
+![Dark theme — all sources](assets/screenshots/app-dark.png)
+
+## Why?
+
+Ever had a port conflict and spent 5 minutes figuring out what's using it? Port Manager shows everything in real time:
+
+- Docker container mappings (`3000 → 3000`)
+- SSH tunnel forwards (`8080 → 80`)
+- kubectl port-forwards (`9090 → 9090`)
+- netsh portproxy rules (`→ 172.20.96.98:80`)
+- Regular processes listening on ports
+
+## Install
+
+```bash
+git clone https://github.com/alli959/port-manager.git
+cd port-manager
+npm install
+npm start
+```
 
 ## Features
 
-- Scans all port-producing services simultaneously:
-  - **WSL** ports (via `ss`)
-  - **Windows** ports (via PowerShell)
-  - **Docker** container port mappings
-  - **SSH** tunnels (`-L` and `-D` forwards)
-  - **kubectl** port-forwards
-  - **netsh portproxy** rules (Windows)
-  - **macOS** ports (via `lsof`)
-  - **Linux** native ports (via `ss`)
-- **Mapping column** shows port forwarding relationships (e.g., `→ 4000`)
-- **Type filter** — view Direct (listen) or Forwarded ports only
-- **Source filter** — dynamically populated from detected sources
-- Stop/disconnect any source directly from the UI:
-  - Docker: graceful stop → force kill
-  - SSH/kubectl: disconnect tunnel
-  - PortProxy: remove rule
-  - Processes: terminate by PID
-- Search across port, process, container name, image, mapping, and tunnel target
-- Sort columns with one click
-- Dark / Light / System theme
-- Auto-refresh with configurable intervals
-- CLI mode for quick terminal lookups
+| Feature | Description |
+|---------|-------------|
+| **Multi-source scanning** | Docker, SSH, K8s, PortProxy, WSL, Windows, macOS, Linux |
+| **Mapping column** | Shows forwarding relationships (e.g., `→ 4000`) |
+| **Source-aware actions** | Stop Container / Disconnect / Remove Rule / Stop |
+| **Filters** | By source, by type (Direct / Forwarded), full-text search |
+| **Themes** | Dark, Light, or follow system |
+| **Auto-refresh** | 1s to 30s intervals, or manual |
+| **Cross-platform** | Works on WSL+Windows, macOS, or native Linux |
 
-## Quick Start
+## CLI
 
 ```bash
-# Clone & install
-git clone <repo-url> port-manager
-cd port-manager
-npm install
-
-# Launch GUI
-npm start
-
-# Or use CLI
-node bin/cli.js list
-```
-
-## CLI Usage
-
-```bash
-port-manager              # Launch GUI
-port-manager list          # List ports in terminal
-port-manager help          # Show help
-port-manager --version     # Show version
-```
-
-## Setup (Global CLI)
-
-```bash
-bash scripts/install.sh    # Install dependencies + link CLI
-bash scripts/uninstall.sh  # Remove CLI links
+node bin/cli.js list    # List all ports in terminal
 ```
 
 ## Development
 
 ```bash
-npm test          # Run tests
-npm start         # Launch app
+npm test     # 138 tests across 12 suites
+npm start    # Launch app
 ```
-
-## Architecture
-
-```
-main/
-  scanner.js          # Port scanning orchestrator + registry
-  platform.js         # Platform detection (wsl/windows/macos/linux)
-  docker-scanner.js   # Docker container port mappings
-  ssh-scanner.js      # SSH tunnel detection (-L/-D)
-  k8s-scanner.js      # kubectl port-forward detection
-  portproxy-scanner.js # netsh portproxy rules
-  macos-scanner.js    # macOS lsof-based scanning
-  linux-scanner.js    # Native Linux ss-based scanning
-  process-manager.js  # Source-aware process termination
-  settings.js         # Persistent settings (electron-store)
-  main.js             # Electron main process + IPC
-  preload.js          # Secure IPC bridge
-renderer/
-  index.html          # Main window
-  styles/             # Dark/light themes + components
-  js/                 # UI modules (table, settings, toast, app)
-bin/
-  cli.js              # CLI entry point
-tests/                # Jest test suites (135+ tests)
-```
-
-## Platform Support
-
-| Platform | Base Scanners | Cross-Platform |
-|----------|--------------|----------------|
-| WSL | WSL + Windows + PortProxy | Docker, SSH, K8s |
-| Windows | Windows + PortProxy | Docker, SSH, K8s |
-| macOS | macOS | Docker, SSH, K8s |
-| Linux | Linux | Docker, SSH, K8s |
-
-## Requirements
-
-- **Node.js** 18+
-- One of: WSL+Windows, macOS, or Linux
-- Optional: Docker, SSH, kubectl (for respective scanners)
 
 ## License
 

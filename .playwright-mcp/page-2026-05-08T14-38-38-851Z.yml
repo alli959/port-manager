@@ -1,0 +1,60 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - heading "âš¡ Port Manager" [level=1] [ref=e3]
+    - generic [ref=e4]:
+      - textbox [ref=e5]: docker
+      - combobox [ref=e6]:
+        - option "All Sources" [selected]
+      - combobox [ref=e7]:
+        - option "Forwarded" [selected]
+      - generic [ref=e8] [cursor=pointer]: â†»
+      - generic [ref=e9] [cursor=pointer]: âš™
+  - table [ref=e10]:
+    - rowgroup [ref=e11]:
+      - row "Port Mapping Protocol Local Address State PID Process Source Actions" [ref=e12]:
+        - columnheader "Port" [ref=e13]
+        - columnheader "Mapping" [ref=e14]
+        - columnheader "Protocol" [ref=e15]
+        - columnheader "Local Address" [ref=e16]
+        - columnheader "State" [ref=e17]
+        - columnheader "PID" [ref=e18]
+        - columnheader "Process" [ref=e19]
+        - columnheader "Source" [ref=e20]
+        - columnheader "Actions" [ref=e21]
+    - rowgroup [ref=e22]:
+      - row "3000 â†’ 3000 TCP 0.0.0.0 LISTEN â€” next-app Docker Stop Container" [ref=e23]:
+        - cell "3000" [ref=e24]
+        - cell "â†’ 3000" [ref=e25]
+        - cell "TCP" [ref=e26]
+        - cell "0.0.0.0" [ref=e27]
+        - cell "LISTEN" [ref=e28]
+        - cell "â€”" [ref=e29]
+        - cell "next-app" [ref=e30]
+        - cell "Docker" [ref=e31]:
+          - generic [ref=e32]: Docker
+        - cell "Stop Container" [ref=e33]:
+          - button "Stop Container" [ref=e34] [cursor=pointer]
+      - row "5432 â†’ 5432 TCP 0.0.0.0 LISTEN â€” postgres:16 Docker Stop Container" [ref=e35]:
+        - cell "5432" [ref=e36]
+        - cell "â†’ 5432" [ref=e37]
+        - cell "TCP" [ref=e38]
+        - cell "0.0.0.0" [ref=e39]
+        - cell "LISTEN" [ref=e40]
+        - cell "â€”" [ref=e41]
+        - cell "postgres:16" [ref=e42]
+        - cell "Docker" [ref=e43]:
+          - generic [ref=e44]: Docker
+        - cell "Stop Container" [ref=e45]:
+          - button "Stop Container" [ref=e46] [cursor=pointer]
+      - row "6379 â†’ 6379 TCP 0.0.0.0 LISTEN â€” redis:7-alpine Docker Stop Container" [ref=e47]:
+        - cell "6379" [ref=e48]
+        - cell "â†’ 6379" [ref=e49]
+        - cell "TCP" [ref=e50]
+        - cell "0.0.0.0" [ref=e51]
+        - cell "LISTEN" [ref=e52]
+        - cell "â€”" [ref=e53]
+        - cell "redis:7-alpine" [ref=e54]
+        - cell "Docker" [ref=e55]:
+          - generic [ref=e56]: Docker
+        - cell "Stop Container" [ref=e57]:
+          - button "Stop Container" [ref=e58] [cursor=pointer]
