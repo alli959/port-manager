@@ -59,7 +59,8 @@ Entries from WSL, Windows, Linux, and macOS base scanners use these defaults for
   containerName: null,
   containerImage: null,
   containerId: null,
-  tunnelTarget: null
+  tunnelTarget: null,
+  proxyType: null
 }
 ```
 
@@ -129,10 +130,13 @@ docker ps --format '{{json .}}'
 ```
 
 **Parsing:** Each JSON line contains a `Ports` field with format:
-- `0.0.0.0:3000->4000/tcp` — host port 3000 mapped to container port 4000
+- `0.0.0.0:3000->4000/tcp` — host port 3000 mapped to container port 4000 (TCP)
+- `0.0.0.0:5353->5353/udp` — UDP port mapping
 - `:::3000->4000/tcp` — IPv6 variant
 - `0.0.0.0:8000-8010->8000-8010/tcp` — port range
-- `4000/tcp` — exposed but not published (skip these)
+- `4000/tcp` — exposed but not published (skip these — no host port)
+
+**Protocol mapping:** The trailing `/tcp` or `/udp` suffix determines the `protocol` field. Default to `'TCP'` if suffix is missing or unrecognized.
 
 **Port range handling:** Ranges like `8000-8010->8000-8010/tcp` are expanded into individual entries (one row per port). Each row shows its specific mapping (e.g., port 8000, mapping "→ 8000"; port 8001, mapping "→ 8001"). This keeps the table granular and actionable — stopping the container affects all ports anyway.
 
@@ -195,12 +199,17 @@ Windows: Already have `CommandLine` from Get-CimInstance.
 - `-L [bind_address:]port:host:hostport` (full format)
 - Multiple `-L` flags on one SSH command produce multiple entries (one row per forward)
 
-**Parsing `-R` flags (remote forward — out of scope):**
-- `-R` forwards do NOT create entries. The remote side listens, not the local machine. SSH doesn't bind a local port for `-R`, so there's nothing to show in the port table. (The local target service, if any, will already appear via the base scanner.)
+**localAddress resolution for `-L`:**
+- No bind address specified (e.g., `-L 3000:host:4000`) → `localAddress: '127.0.0.1'` (SSH default)
+- Explicit bind address (e.g., `-L 0.0.0.0:3000:host:4000`) → `localAddress: '0.0.0.0'`
+- Wildcard `*` bind (e.g., `-L *:3000:host:4000`) → `localAddress: '0.0.0.0'`
+- IPv6 bind (e.g., `-L [::1]:3000:host:4000`) → `localAddress: '::1'`
+- Empty string bind (e.g., `-L :3000:host:4000`) → treated as all interfaces: `localAddress: '0.0.0.0'`
 
 **`-D` flag (SOCKS proxy — in scope):**
-- `-D 1080` → port 1080, mapping "SOCKS proxy", type "forward"
-- SOCKS proxies occupy a local port and are actionable (kill SSH process to close)
+- `-D 1080` → port 1080, localAddress `'127.0.0.1'`, mapping "SOCKS proxy", type "forward"
+- `-D 0.0.0.0:1080` → port 1080, localAddress `'0.0.0.0'`, mapping "SOCKS proxy", type "forward"
+- Same bind-address rules as `-L` apply
 
 **Out of scope:** `-R` remote forwards (no local port bound), SSH connections without forwarding flags.
 
@@ -244,6 +253,13 @@ Get-CimInstance Win32_Process -Filter "Name='kubectl.exe' AND CommandLine LIKE '
 - `kubectl port-forward svc/my-service 3000:80` → port 3000, mapping "→ svc/my-service:80"
 - `kubectl port-forward deployment/app 9090:9090` → port 9090, mapping "→ deployment/app:9090"
 - `kubectl port-forward pod/nginx 8080:80 9090:90` → two entries (one per port pair)
+- `kubectl port-forward pod/nginx 8080` → single-port form (localPort == remotePort): port 8080, mapping "→ pod/nginx:8080"
+
+**localAddress resolution for kubectl:**
+- Default (no `--address` flag) → `localAddress: '127.0.0.1'`
+- `--address 0.0.0.0` → `localAddress: '0.0.0.0'`
+- `--address localhost,0.0.0.0` (multiple addresses) → one entry per address, same port
+- Parse `--address` value by splitting on `,`; each produces its own row
 
 **Output:**
 ```javascript
@@ -304,8 +320,14 @@ portproxyRule?: {
 
 **Delete command uses the correct variant:**
 ```
+# From WSL:
+powershell.exe -NoProfile -Command "netsh interface portproxy delete <proxyType> listenport=X listenaddress=Y"
+
+# From native Windows:
 netsh interface portproxy delete <proxyType> listenport=X listenaddress=Y
 ```
+
+The process manager uses the platform to determine whether to wrap in `powershell.exe` (WSL) or call `netsh` directly (native Windows). Same pattern used for scanning.
 
 **Output:**
 ```javascript
@@ -322,7 +344,8 @@ netsh interface portproxy delete <proxyType> listenport=X listenaddress=Y
   containerName: null,
   containerImage: null,
   containerId: null,
-  tunnelTarget: '172.28.176.1:3000'
+  tunnelTarget: '172.28.176.1:3000',
+  proxyType: 'v4tov4'
 }
 ```
 
@@ -562,7 +585,7 @@ interface KillRequest {
 | Docker | `docker stop -t 10 <id>`, escalate to `docker kill <id>` | 15s |
 | SSH | `kill -9 <pid>` | 5s |
 | Kubernetes | `kill -9 <pid>` | 5s |
-| PortProxy | `netsh interface portproxy delete <proxyType> listenport=X listenaddress=Y` | 5s |
+| PortProxy | `powershell.exe ... "netsh interface portproxy delete <proxyType> ..."` (WSL) or `netsh ...` (native Windows) | 5s |
 
 ### Docker Stop Flow
 
