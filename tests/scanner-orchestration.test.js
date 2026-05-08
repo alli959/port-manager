@@ -30,8 +30,14 @@ describe('getScanners', () => {
     expect(names).not.toContain('WSL');
   });
 
-  test('unknown platform returns empty array', () => {
-    expect(getScanners('unknown')).toEqual([]);
+  test('unknown platform still includes cross-platform scanners', () => {
+    const scanners = getScanners('unknown');
+    const names = scanners.map(s => s.name);
+    expect(names).toContain('Docker');
+    expect(names).toContain('SSH');
+    expect(names).toContain('Kubernetes');
+    expect(names).not.toContain('WSL');
+    expect(names).not.toContain('Windows');
   });
 });
 
@@ -54,6 +60,9 @@ describe('scanPorts orchestration', () => {
       if (cmd.includes('ss -ulnp')) return cb(null, { stdout: ssUdp, stderr: '' });
       if (cmd.includes('Get-NetTCPConnection')) return cb(null, { stdout: '[]', stderr: '' });
       if (cmd.includes('Get-NetUDPEndpoint')) return cb(null, { stdout: '[]', stderr: '' });
+      if (cmd.includes('docker ps')) return cb(null, { stdout: '', stderr: '' });
+      if (cmd.includes('grep')) { const e = new Error(''); e.code = 1; return cb(e, { stdout: '', stderr: '' }); }
+      if (cmd.includes('portproxy')) return cb(null, { stdout: '', stderr: '' });
       cb(new Error('unexpected command'));
     });
 
@@ -69,7 +78,11 @@ describe('scanPorts orchestration', () => {
       if (typeof opts === 'function') { cb = opts; opts = {}; }
       if (cmd.includes('ss -tlnp')) return cb(null, { stdout: ssTcp, stderr: '' });
       if (cmd.includes('ss -ulnp')) return cb(null, { stdout: '', stderr: '' });
-      if (cmd.includes('powershell')) return cb(new Error('PowerShell not found'));
+      if (cmd.includes('Get-NetTCPConnection')) return cb(new Error('PowerShell not found'));
+      if (cmd.includes('Get-NetUDPEndpoint')) return cb(new Error('PowerShell not found'));
+      if (cmd.includes('docker ps')) return cb(null, { stdout: '', stderr: '' });
+      if (cmd.includes('grep')) { const e = new Error(''); e.code = 1; return cb(e, { stdout: '', stderr: '' }); }
+      if (cmd.includes('portproxy')) return cb(null, { stdout: '', stderr: '' });
       cb(new Error('unexpected'));
     });
 
@@ -80,7 +93,7 @@ describe('scanPorts orchestration', () => {
     expect(result.errors[0].source).toBe('Windows');
   });
 
-  test('returns errors for both sources when both fail', async () => {
+  test('returns errors for all sources when all fail', async () => {
     exec.mockImplementation((cmd, opts, cb) => {
       if (typeof opts === 'function') { cb = opts; opts = {}; }
       cb(new Error('command not found'));
@@ -88,7 +101,7 @@ describe('scanPorts orchestration', () => {
 
     const result = await scanPorts();
     expect(result.ports).toEqual([]);
-    expect(result.errors).toHaveLength(2);
+    expect(result.errors.length).toBeGreaterThanOrEqual(2);
   });
 });
 

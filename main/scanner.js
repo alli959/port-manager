@@ -1,6 +1,12 @@
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const { getPlatform } = require('./platform');
+const { scanDocker } = require('./docker-scanner');
+const { scanSSH } = require('./ssh-scanner');
+const { scanK8s } = require('./k8s-scanner');
+const { scanPortProxy } = require('./portproxy-scanner');
+const { scanMacOS } = require('./macos-scanner');
+const { scanLinux } = require('./linux-scanner');
 
 const execAsync = promisify(exec);
 const SCAN_TIMEOUT_MS = 5000;
@@ -170,9 +176,20 @@ function getScanners(platform) {
   if (platform === 'wsl') {
     scanners.push({ name: 'WSL', scan: scanWSL });
     scanners.push({ name: 'Windows', scan: scanWindows });
+    scanners.push({ name: 'PortProxy', scan: scanPortProxy });
   } else if (platform === 'windows') {
     scanners.push({ name: 'Windows', scan: scanWindows });
+    scanners.push({ name: 'PortProxy', scan: scanPortProxy });
+  } else if (platform === 'macos') {
+    scanners.push({ name: 'macOS', scan: scanMacOS });
+  } else if (platform === 'linux') {
+    scanners.push({ name: 'Linux', scan: scanLinux });
   }
+
+  // Cross-platform scanners
+  scanners.push({ name: 'Docker', scan: scanDocker });
+  scanners.push({ name: 'SSH', scan: scanSSH });
+  scanners.push({ name: 'Kubernetes', scan: scanK8s });
 
   return scanners;
 }
