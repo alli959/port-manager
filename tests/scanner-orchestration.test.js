@@ -8,11 +8,15 @@ jest.mock('child_process', () => {
 });
 
 const { exec } = require('child_process');
-const { scanPorts } = require('../main/scanner');
+const { scanWindows, scanPorts } = require('../main/scanner');
 
 describe('scanPorts orchestration', () => {
   beforeEach(() => {
     exec.mockReset();
+    exec.mockImplementation((cmd, opts, cb) => {
+      if (typeof opts === 'function') { cb = opts; }
+      cb(new Error(`unmocked command: ${cmd}`));
+    });
   });
 
   test('returns ports from both sources on success', async () => {
@@ -60,5 +64,86 @@ describe('scanPorts orchestration', () => {
     const result = await scanPorts();
     expect(result.ports).toEqual([]);
     expect(result.errors).toHaveLength(2);
+  });
+});
+
+describe('scanWindows', () => {
+  test('normalizes singleton JSON and resolves process names', async () => {
+    exec.mockImplementation((cmd, opts, cb) => {
+      if (typeof opts === 'function') { cb = opts; opts = {}; }
+      if (cmd.includes('Get-NetTCPConnection')) {
+        return cb(null, {
+          stdout: '{"LocalAddress":"0.0.0.0","LocalPort":80,"State":2,"OwningProcess":4}',
+          stderr: ''
+        });
+      }
+      if (cmd.includes('Get-NetUDPEndpoint')) {
+        return cb(null, {
+          stdout: '{"LocalAddress":"0.0.0.0","LocalPort":53,"OwningProcess":1001}',
+          stderr: ''
+        });
+      }
+      if (cmd.includes('Get-Process -Id 4,1001')) {
+        return cb(null, {
+          stdout: '[{"Id":4,"ProcessName":"System"},{"Id":1001,"ProcessName":"dnsmasq"}]',
+          stderr: ''
+        });
+      }
+      return cb(new Error(`unexpected command: ${cmd}`));
+    });
+
+    const entries = await scanWindows();
+    expect(entries).toEqual([
+      {
+        port: 80,
+        protocol: 'TCP',
+        localAddress: '0.0.0.0',
+        state: 'LISTEN',
+        pid: 4,
+        processName: 'System',
+        source: 'Windows'
+      },
+      {
+        port: 53,
+        protocol: 'UDP',
+        localAddress: '0.0.0.0',
+        state: '*',
+        pid: 1001,
+        processName: 'dnsmasq',
+        source: 'Windows'
+      }
+    ]);
+  });
+
+  test('keeps unknown names when process lookup fails', async () => {
+    exec.mockImplementation((cmd, opts, cb) => {
+      if (typeof opts === 'function') { cb = opts; opts = {}; }
+      if (cmd.includes('Get-NetTCPConnection')) {
+        return cb(null, {
+          stdout: '[{"LocalAddress":"127.0.0.1","LocalPort":3000,"State":2,"OwningProcess":1234}]',
+          stderr: ''
+        });
+      }
+      if (cmd.includes('Get-NetUDPEndpoint')) {
+        return cb(null, { stdout: '[]', stderr: '' });
+      }
+      if (cmd.includes('Get-Process -Id 1234')) {
+        return cb(new Error('lookup failed'));
+      }
+      return cb(new Error(`unexpected command: ${cmd}`));
+    });
+
+    const entries = await scanWindows();
+    expect(entries).toEqual([
+      {
+        port: 3000,
+        protocol: 'TCP',
+        localAddress: '127.0.0.1',
+        state: 'LISTEN',
+        pid: 1234,
+        processName: '<unknown>',
+        source: 'Windows'
+      }
+    ]);
   });
 });

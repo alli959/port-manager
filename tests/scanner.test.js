@@ -140,6 +140,12 @@ describe('parseWindowsTCP', () => {
     const entries = parseWindowsTCP(json);
     expect(entries[0].pid).toBeNull();
   });
+
+  test('preserves PID 0', () => {
+    const json = [{ LocalAddress: '0.0.0.0', LocalPort: 80, State: 2, OwningProcess: 0 }];
+    const entries = parseWindowsTCP(json);
+    expect(entries[0].pid).toBe(0);
+  });
 });
 
 describe('parseWindowsUDP', () => {
@@ -163,6 +169,12 @@ describe('parseWindowsUDP', () => {
 
   test('handles null input', () => {
     expect(parseWindowsUDP(null)).toEqual([]);
+  });
+
+  test('preserves PID 0', () => {
+    const json = [{ LocalAddress: '0.0.0.0', LocalPort: 53, OwningProcess: 0 }];
+    const entries = parseWindowsUDP(json);
+    expect(entries[0].pid).toBe(0);
   });
 });
 
@@ -189,5 +201,11 @@ describe('resolveProcessNames', () => {
     const entries = [{ pid: null, processName: '<unknown>', port: 80 }];
     const resolved = resolveProcessNames(entries, { 1: 'System' });
     expect(resolved[0].processName).toBe('<unknown>');
+  });
+
+  test('resolves PID 0 from process map', () => {
+    const entries = [{ pid: 0, processName: '<unknown>', port: 80 }];
+    const resolved = resolveProcessNames(entries, { 0: 'Idle' });
+    expect(resolved[0].processName).toBe('Idle');
   });
 });

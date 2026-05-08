@@ -4,6 +4,10 @@ const { promisify } = require('util');
 const execAsync = promisify(exec);
 const SCAN_TIMEOUT_MS = 5000;
 
+function hasPid(pid) {
+  return pid !== null && pid !== undefined;
+}
+
 function parseSSLine(line, protocol) {
   const parts = line.trim().split(/\s+/);
   if (parts.length < 5) return null;
@@ -58,7 +62,7 @@ function parseWindowsTCP(json) {
     protocol: 'TCP',
     localAddress: entry.LocalAddress,
     state: 'LISTEN',
-    pid: entry.OwningProcess || null,
+    pid: entry.OwningProcess ?? null,
     processName: '<unknown>',
     source: 'Windows'
   }));
@@ -72,7 +76,7 @@ function parseWindowsUDP(json) {
     protocol: 'UDP',
     localAddress: entry.LocalAddress,
     state: '*',
-    pid: entry.OwningProcess || null,
+    pid: entry.OwningProcess ?? null,
     processName: '<unknown>',
     source: 'Windows'
   }));
@@ -80,7 +84,7 @@ function parseWindowsUDP(json) {
 
 function resolveProcessNames(entries, processMap) {
   return entries.map((entry) => {
-    if (entry.pid && processMap[entry.pid]) {
+    if (hasPid(entry.pid) && processMap[entry.pid]) {
       return { ...entry, processName: processMap[entry.pid] };
     }
 
@@ -117,7 +121,7 @@ async function scanWindows() {
 
   let entries = [...parseWindowsTCP(tcpJson), ...parseWindowsUDP(udpJson)];
 
-  const pids = [...new Set(entries.filter((entry) => entry.pid).map((entry) => entry.pid))];
+  const pids = [...new Set(entries.filter((entry) => hasPid(entry.pid)).map((entry) => entry.pid))];
   if (pids.length > 0) {
     try {
       const resolveCmd = `powershell.exe -NoProfile -Command "Get-Process -Id ${pids.join(',')} -ErrorAction SilentlyContinue | Select-Object Id,ProcessName | ConvertTo-Json"`;
