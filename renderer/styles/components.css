@@ -71,6 +71,35 @@
   background: var(--bg-badge-windows);
 }
 
+.badge-docker {
+  background: #0db7ed;
+}
+
+.badge-ssh {
+  background: #6b7280;
+}
+
+.badge-kubernetes {
+  background: #326ce5;
+}
+
+.badge-portproxy {
+  background: #7c3aed;
+}
+
+.badge-macos {
+  background: #a3a3a3;
+}
+
+.badge-linux {
+  background: #e95420;
+}
+
+.mapping-cell {
+  color: var(--accent);
+  font-weight: 500;
+}
+
 .refresh-icon.spinning {
   display: inline-block;
   animation: spin 0.8s linear infinite;

@@ -20,8 +20,12 @@
         </div>
         <select id="source-filter">
           <option value="all">All Sources</option>
-          <option value="WSL">WSL</option>
-          <option value="Windows">Windows</option>
+          <!-- Populated dynamically by app.js based on platform -->
+        </select>
+        <select id="type-filter">
+          <option value="all">All Types</option>
+          <option value="listen">Direct</option>
+          <option value="forward">Forwarded</option>
         </select>
         <button id="refresh-btn" class="btn btn-icon" title="Refresh">
           <span class="refresh-icon">↻</span>
@@ -39,6 +43,7 @@
         <thead>
           <tr>
             <th data-column="port" class="sortable">Port <span class="sort-indicator"></span></th>
+            <th data-column="mapping" class="sortable">Mapping <span class="sort-indicator"></span></th>
             <th data-column="protocol" class="sortable">Protocol <span class="sort-indicator"></span></th>
             <th data-column="localAddress" class="sortable">Local Address <span class="sort-indicator"></span></th>
             <th data-column="state" class="sortable">State <span class="sort-indicator"></span></th>

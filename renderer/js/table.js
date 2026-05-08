@@ -1,5 +1,5 @@
 let currentSort = { column: 'port', direction: 'asc' };
-let currentFilter = { search: '', source: 'all' };
+let currentFilter = { search: '', source: 'all', type: 'all' };
 let portData = [];
 
 function escapeHTML(str) {
@@ -13,11 +13,19 @@ function setPortData(data) {
   renderTable();
 }
 
+function getPortData() {
+  return portData;
+}
+
 function getFilteredAndSortedData() {
   let filtered = [...portData];
 
   if (currentFilter.source !== 'all') {
     filtered = filtered.filter(p => p.source === currentFilter.source);
+  }
+
+  if (currentFilter.type !== 'all') {
+    filtered = filtered.filter(p => p.type === currentFilter.type);
   }
 
   if (currentFilter.search) {
@@ -28,7 +36,11 @@ function getFilteredAndSortedData() {
       p.localAddress.toLowerCase().includes(query) ||
       p.protocol.toLowerCase().includes(query) ||
       p.source.toLowerCase().includes(query) ||
-      (p.pid && String(p.pid).includes(query))
+      (p.pid && String(p.pid).includes(query)) ||
+      (p.mapping && p.mapping.toLowerCase().includes(query)) ||
+      (p.containerName && p.containerName.toLowerCase().includes(query)) ||
+      (p.containerImage && p.containerImage.toLowerCase().includes(query)) ||
+      (p.tunnelTarget && p.tunnelTarget.toLowerCase().includes(query))
     );
   }
 
@@ -52,6 +64,35 @@ function getFilteredAndSortedData() {
   return filtered;
 }
 
+function getActionButton(entry) {
+  const source = entry.source;
+  let label, canAct;
+
+  if (source === 'Docker') {
+    label = 'Stop Container';
+    canAct = !!entry.containerId;
+  } else if (source === 'SSH' || source === 'Kubernetes') {
+    label = 'Disconnect';
+    canAct = entry.pid !== null;
+  } else if (source === 'PortProxy') {
+    label = 'Remove Rule';
+    canAct = true;
+  } else {
+    label = 'Stop';
+    canAct = entry.pid !== null && entry.processName !== '<unknown>';
+  }
+
+  const dataAttrs = `data-pid="${entry.pid}" data-source="${source}" data-process="${escapeHTML(entry.processName)}" data-port="${entry.port}"` +
+    (entry.containerId ? ` data-container-id="${escapeHTML(entry.containerId)}"` : '') +
+    (entry.localAddress ? ` data-listen-address="${escapeHTML(entry.localAddress)}"` : '') +
+    (entry.proxyType ? ` data-proxy-type="${entry.proxyType}"` : '') +
+    (entry.mapping ? ` data-mapping="${escapeHTML(entry.mapping)}"` : '');
+
+  return `<button class="btn btn-danger btn-sm stop-btn"
+    ${canAct ? '' : 'disabled title="Cannot stop — unknown process"'}
+    ${dataAttrs}>${label}</button>`;
+}
+
 function renderTable() {
   const tbody = document.getElementById('port-table-body');
   const emptyState = document.getElementById('empty-state');
@@ -73,25 +114,19 @@ function renderTable() {
     const pidDisplay = entry.pid !== null ? entry.pid : '—';
     const processClass = entry.processName === '<unknown>' ? 'text-muted' : '';
     const processDisplay = entry.processName === '<unknown>' ? 'Unknown' : escapeHTML(entry.processName);
-    const canStop = entry.pid !== null && entry.processName !== '<unknown>';
     const addr = escapeHTML(entry.localAddress);
+    const mappingDisplay = entry.mapping ? escapeHTML(entry.mapping) : '—';
 
     return `<tr>
       <td>${entry.port}</td>
+      <td class="${entry.mapping ? 'mapping-cell' : ''}">${mappingDisplay}</td>
       <td>${entry.protocol}</td>
       <td>${addr}</td>
       <td>${entry.state}</td>
       <td>${pidDisplay}</td>
       <td class="${processClass}">${processDisplay}</td>
       <td><span class="badge badge-${entry.source.toLowerCase()}">${entry.source}</span></td>
-      <td>
-        <button class="btn btn-danger btn-sm stop-btn"
-          ${canStop ? '' : 'disabled title="Cannot stop — unknown process"'}
-          data-pid="${entry.pid}"
-          data-source="${entry.source}"
-          data-process="${escapeHTML(processDisplay)}"
-          data-port="${entry.port}">Stop</button>
-      </td>
+      <td>${getActionButton(entry)}</td>
     </tr>`;
   }).join('');
 }
