@@ -2,3 +2,4 @@ node_modules/
 dist/
 launch.bat
 *.log
+.playwright-mcp/
