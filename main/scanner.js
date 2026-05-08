@@ -62,7 +62,7 @@ function parseWindowsTCP(json) {
     protocol: 'TCP',
     localAddress: entry.LocalAddress,
     state: 'LISTEN',
-    pid: entry.OwningProcess ?? null,
+    pid: typeof entry.OwningProcess === 'number' ? entry.OwningProcess : null,
     processName: '<unknown>',
     source: 'Windows'
   }));
@@ -76,7 +76,7 @@ function parseWindowsUDP(json) {
     protocol: 'UDP',
     localAddress: entry.LocalAddress,
     state: '*',
-    pid: entry.OwningProcess ?? null,
+    pid: typeof entry.OwningProcess === 'number' ? entry.OwningProcess : null,
     processName: '<unknown>',
     source: 'Windows'
   }));
