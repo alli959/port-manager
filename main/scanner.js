@@ -1,5 +1,6 @@
 const { exec } = require('child_process');
 const { promisify } = require('util');
+const { getPlatform } = require('./platform');
 
 const execAsync = promisify(exec);
 const SCAN_TIMEOUT_MS = 5000;
@@ -163,23 +164,40 @@ async function scanWindows() {
   return entries;
 }
 
+function getScanners(platform) {
+  const scanners = [];
+
+  if (platform === 'wsl') {
+    scanners.push({ name: 'WSL', scan: scanWSL });
+    scanners.push({ name: 'Windows', scan: scanWindows });
+  } else if (platform === 'windows') {
+    scanners.push({ name: 'Windows', scan: scanWindows });
+  }
+
+  return scanners;
+}
+
 async function scanPorts() {
-  const results = await Promise.allSettled([scanWSL(), scanWindows()]);
+  const platform = getPlatform();
+  const scanners = getScanners(platform);
+
+  const results = await Promise.allSettled(
+    scanners.map(scanner => scanner.scan())
+  );
 
   const ports = [];
   const errors = [];
 
-  if (results[0].status === 'fulfilled') {
-    ports.push(...results[0].value);
-  } else {
-    errors.push({ source: 'WSL', message: results[0].reason?.message || 'WSL scan failed' });
-  }
-
-  if (results[1].status === 'fulfilled') {
-    ports.push(...results[1].value);
-  } else {
-    errors.push({ source: 'Windows', message: results[1].reason?.message || 'Windows scan failed' });
-  }
+  results.forEach((result, i) => {
+    if (result.status === 'fulfilled') {
+      ports.push(...result.value);
+    } else {
+      errors.push({
+        source: scanners[i].name,
+        message: result.reason?.message || `${scanners[i].name} scan failed`
+      });
+    }
+  });
 
   return { ports, errors };
 }
@@ -190,6 +208,7 @@ module.exports = {
   parseWindowsTCP,
   parseWindowsUDP,
   resolveProcessNames,
+  getScanners,
   scanWSL,
   scanWindows,
   scanPorts

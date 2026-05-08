@@ -7,8 +7,33 @@ jest.mock('child_process', () => {
   };
 });
 
+jest.mock('../main/platform', () => ({
+  getPlatform: jest.fn(() => 'wsl')
+}));
+
 const { exec } = require('child_process');
-const { scanWindows, scanPorts } = require('../main/scanner');
+const { getPlatform } = require('../main/platform');
+const { scanWindows, scanPorts, getScanners } = require('../main/scanner');
+
+describe('getScanners', () => {
+  test('wsl returns WSL and Windows scanners', () => {
+    const scanners = getScanners('wsl');
+    const names = scanners.map(s => s.name);
+    expect(names).toContain('WSL');
+    expect(names).toContain('Windows');
+  });
+
+  test('windows returns only Windows scanner', () => {
+    const scanners = getScanners('windows');
+    const names = scanners.map(s => s.name);
+    expect(names).toContain('Windows');
+    expect(names).not.toContain('WSL');
+  });
+
+  test('unknown platform returns empty array', () => {
+    expect(getScanners('unknown')).toEqual([]);
+  });
+});
 
 describe('scanPorts orchestration', () => {
   beforeEach(() => {
@@ -101,7 +126,14 @@ describe('scanWindows', () => {
         state: 'LISTEN',
         pid: 4,
         processName: 'System',
-        source: 'Windows'
+        source: 'Windows',
+        type: 'listen',
+        mapping: null,
+        containerName: null,
+        containerImage: null,
+        containerId: null,
+        tunnelTarget: null,
+        proxyType: null
       },
       {
         port: 53,
@@ -110,7 +142,14 @@ describe('scanWindows', () => {
         state: '*',
         pid: 1001,
         processName: 'dnsmasq',
-        source: 'Windows'
+        source: 'Windows',
+        type: 'listen',
+        mapping: null,
+        containerName: null,
+        containerImage: null,
+        containerId: null,
+        tunnelTarget: null,
+        proxyType: null
       }
     ]);
   });
@@ -142,7 +181,14 @@ describe('scanWindows', () => {
         state: 'LISTEN',
         pid: 1234,
         processName: '<unknown>',
-        source: 'Windows'
+        source: 'Windows',
+        type: 'listen',
+        mapping: null,
+        containerName: null,
+        containerImage: null,
+        containerId: null,
+        tunnelTarget: null,
+        proxyType: null
       }
     ]);
   });
