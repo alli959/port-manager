@@ -80,23 +80,20 @@ async function scanPortProxy() {
   if (platform !== 'wsl' && platform !== 'windows') return [];
 
   const families = ['v4tov4', 'v4tov6', 'v6tov4', 'v6tov6'];
+
+  const results = await Promise.allSettled(
+    families.map((family) => {
+      const cmd = platform === 'wsl'
+        ? `powershell.exe -NoProfile -Command "netsh interface portproxy show ${family}"`
+        : `netsh interface portproxy show ${family}`;
+      return execAsync(cmd, { timeout: SCAN_TIMEOUT_MS });
+    })
+  );
+
   const entries = [];
-
-  for (const family of families) {
-    try {
-      let cmd;
-      if (platform === 'wsl') {
-        cmd = `powershell.exe -NoProfile -Command "netsh interface portproxy show ${family}"`;
-      } else {
-        cmd = `netsh interface portproxy show ${family}`;
-      }
-
-      const { stdout } = await execAsync(cmd, { timeout: SCAN_TIMEOUT_MS });
-      if (stdout.trim()) {
-        entries.push(...parsePortProxyOutput(stdout));
-      }
-    } catch {
-      // Command failed for this family — skip silently
+  for (const result of results) {
+    if (result.status === 'fulfilled' && result.value.stdout.trim()) {
+      entries.push(...parsePortProxyOutput(result.value.stdout));
     }
   }
 
