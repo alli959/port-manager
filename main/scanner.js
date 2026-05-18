@@ -10,6 +10,7 @@ const { scanLinux } = require('./linux-scanner');
 
 const execAsync = promisify(exec);
 const SCAN_TIMEOUT_MS = 5000;
+const WINDOWS_SCAN_TIMEOUT_MS = 15000;
 
 function hasPid(pid) {
   return pid !== null && pid !== undefined;
@@ -137,8 +138,8 @@ async function scanWindows() {
   const udpCmd = 'powershell.exe -NoProfile -Command "Get-NetUDPEndpoint | Select-Object LocalAddress,LocalPort,OwningProcess | ConvertTo-Json"';
 
   const [tcpResult, udpResult] = await Promise.all([
-    execAsync(tcpCmd, { timeout: SCAN_TIMEOUT_MS }),
-    execAsync(udpCmd, { timeout: SCAN_TIMEOUT_MS })
+    execAsync(tcpCmd, { timeout: WINDOWS_SCAN_TIMEOUT_MS }),
+    execAsync(udpCmd, { timeout: WINDOWS_SCAN_TIMEOUT_MS })
   ]);
 
   let tcpJson = tcpResult.stdout.trim() ? JSON.parse(tcpResult.stdout) : [];
@@ -153,7 +154,7 @@ async function scanWindows() {
   if (pids.length > 0) {
     try {
       const resolveCmd = `powershell.exe -NoProfile -Command "Get-Process -Id ${pids.join(',')} -ErrorAction SilentlyContinue | Select-Object Id,ProcessName | ConvertTo-Json"`;
-      const resolveResult = await execAsync(resolveCmd, { timeout: SCAN_TIMEOUT_MS });
+      const resolveResult = await execAsync(resolveCmd, { timeout: WINDOWS_SCAN_TIMEOUT_MS });
       let processJson = resolveResult.stdout.trim() ? JSON.parse(resolveResult.stdout) : [];
       if (!Array.isArray(processJson)) processJson = [processJson];
 
